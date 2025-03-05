@@ -1,0 +1,56 @@
+This software is a derivative work of ExRated by Glenn Rempe (https://github.com/grempe/ex_rated),
+which is licensed under the Apache License, Version 2.0.
+
+Original Work:
+Copyright (c) 2014-2015 Glenn Rempe.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Modifications:
+Copyright (c) 2025 Grant Haylock
+
+Modifications and additions made by Grant Haylock (https://github.com/HaylockGrant/compute_rated):
+
+1. Concept Change: Transformed from a token bucket algorithm for request-based rate limiting 
+   to a leaky bucket algorithm optimized for compute time limits.
+
+2. New Functions: 
+   - add_compute_time/4
+   - wait_for_capacity/5
+
+3. Modified Functions:
+   - check_rate/4 (adapted for compute time)
+   - Removed inspect_bucket/3
+
+4. Algorithm Changes:
+   - Implemented time-based leaking of compute time
+   - Added calculations for leak rate and remaining capacity
+
+5. Data Structure: Modified to store compute time instead of request counts
+
+6. Error Handling: Updated to include current and remaining compute time in responses
+
+7. Waiting Mechanism: Added functionality to wait for available capacity
+
+8. Time Handling: Simplified timestamp generation
+
+9. Naming: Changed module and application names from ExRated to ComputeRated
+
+10. Documentation: Updated to reflect focus on compute time management
+
+11. Dependencies: Removed some development dependencies
+
+12. Project Metadata: Updated version, description, and repository links
+
+This derivative work is also licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
