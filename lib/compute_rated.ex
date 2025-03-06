@@ -96,7 +96,16 @@ defmodule ComputeRated do
   @spec wait_for_capacity(id :: any, scale :: integer, limit :: integer, estimated_cost :: integer | nil, wait_for_full_depletion :: boolean) ::
           :ok
   def wait_for_capacity(id, scale, limit, estimated_cost \\ nil, wait_for_full_depletion \\ false) do
-    GenServer.call(:compute_rated, {:wait_for_capacity, id, scale, limit, estimated_cost, wait_for_full_depletion})
+    # Initial check to see how much waiting is needed
+    case GenServer.call(:compute_rated, {:check_capacity, id, scale, limit, estimated_cost, wait_for_full_depletion}) do
+      :ok ->
+        :ok  # No waiting needed
+      {:wait, sleep_time} ->
+        # Wait outside the GenServer call
+        Process.sleep(sleep_time)
+        # Recursively check again until we don't need to wait
+        wait_for_capacity(id, scale, limit, estimated_cost, wait_for_full_depletion)
+    end
   end
 
   @doc """
@@ -150,14 +159,40 @@ defmodule ComputeRated do
     {:reply, result, state}
   end
 
+  def handle_call({:check_capacity, id, scale, limit, estimated_cost, wait_for_full_depletion}, _from, state) do
+    ets_table_name = ets_table_name()
+
+    # If waiting for full depletion, we need the bucket to be empty
+    target_amount = if wait_for_full_depletion, do: 0, else: estimated_cost || 0
+
+    # Check current capacity
+    case check_and_get_capacity(id, scale, limit, target_amount, ets_table_name, true) do
+      {:ok, _, _} ->
+        # We already have enough capacity
+        {:reply, :ok, state}
+
+      {:error, current, _} ->
+        # Calculate how much time we need to wait for enough capacity
+        leak_rate = limit / scale
+
+        # How much needs to leak out to have space for our target amount
+        needed_leak = if wait_for_full_depletion do
+          current
+        else
+          current + (estimated_cost || 0) - limit
+        end
+
+        # Calculate sleep time in milliseconds
+        sleep_time = ceil(needed_leak / leak_rate)
+
+        # Tell client to sleep and check again
+        {:reply, {:wait, sleep_time}, state}
+    end
+  end
+
   def handle_call({:add_compute_time, id, scale, limit, amount}, _from, state) do
     ets_table_name = ets_table_name()
     result = add_compute_time(id, scale, limit, amount, ets_table_name)
-    {:reply, result, state}
-  end
-
-  def handle_call({:wait_for_capacity, id, scale, limit, estimated_cost, wait_for_full_depletion}, _from, state) do
-    result = do_wait_for_capacity(id, scale, limit, estimated_cost, wait_for_full_depletion)
     {:reply, result, state}
   end
 
@@ -298,39 +333,6 @@ defmodule ComputeRated do
         true = :ets.insert(ets_table_name, {key, new_amount, created_at, stamp})
 
         {:ok, trunc(new_amount), trunc(remaining)}
-    end
-  end
-
-  # Wait for capacity to be available
-  defp do_wait_for_capacity(id, scale, limit, estimated_cost, wait_for_full_depletion) do
-    ets_table_name = ets_table_name()
-
-    # If waiting for full depletion, we need the bucket to be empty
-    target_amount = if wait_for_full_depletion, do: 0, else: estimated_cost || 0
-
-    # Check current capacity
-    case check_and_get_capacity(id, scale, limit, target_amount, ets_table_name, true) do
-      {:ok, _, _} ->
-        # We already have enough capacity
-        :ok
-
-      {:error, current, _} ->
-        # Calculate how much time we need to wait for enough capacity
-        leak_rate = limit / scale
-
-        # How much needs to leak out to have space for our target amount
-        needed_leak = if wait_for_full_depletion do
-          current
-        else
-          current + (estimated_cost || 0) - limit
-        end
-
-        # Calculate sleep time in milliseconds
-        sleep_time = ceil(needed_leak / leak_rate)
-
-        # Sleep and then recurse to check again
-        Process.sleep(sleep_time)
-        do_wait_for_capacity(id, scale, limit, estimated_cost, wait_for_full_depletion)
     end
   end
 
